@@ -2,7 +2,6 @@ package main
 
 import (
     "net"
-    "fmt"
 )
 
 
@@ -19,8 +18,5 @@ func serve(a *args) {
 func handleRequest(conn net.Conn) {
     buf := make([]byte, 1024)
     conn.Read(buf)
-    data := string(buf)
-    if len(data)>0 {
-        fmt.Println(data)
-    }
+    //data := string(buf)
 }
