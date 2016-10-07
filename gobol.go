@@ -7,9 +7,10 @@ import (
     //"os"
 )
 
-var ARGS args
-var C cursor = cursor{0,0}
-var CONF config = config{prompt: ":: "}
+var ARGS args                       // contains commandline arguments
+var C cursor = cursor{}             // current position of cursor
+var CONF config = config{prompt: ":: "} // some configuration settings
+var mbuff []rune                    // a slice of runes for current message
 
 func init() {
     flag.StringVar(&ARGS.host, "h", "0.0.0.0", "Specify host for gobol.")
