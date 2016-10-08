@@ -33,7 +33,7 @@ type config struct {
 func shell() {
     termbox.Init()                      // start termbox
     defer termbox.Close()               // push Close to bottom of stack
-    CONF.nullChar = termbox.CellBuffer()[0].Ch
+    CONF.nullChar = termbox.CellBuffer()[0].Ch // get "empty" char for future
     CONF.w, CONF.h = termbox.Size()     // get initial dimensions
     CONF.mw = CONF.w - len(CONF.prompt) // calculate message width per line
     prints(CONF.prompt)
@@ -44,20 +44,17 @@ func shell() {
         termbox.SetCursor(C.x, C.y)
         termbox.Flush()
         CONF.w, CONF.h = termbox.Size()
+        CONF.mw = CONF.w - len(CONF.prompt)
         ev:=termbox.PollEvent()
 
         if ev.Type==termbox.EventKey {
             if ev.Ch != 0 {
-                if C.rx==len(mbuff) {           // if cursor at end of msg
-                    newline := print(ev.Ch)     // print rune
-                    C.rx++                      // advance cursor's relative pos
-                    if newline==true {
-                        C.ry++
-                    }
-                    mbuff = append(mbuff, ev.Ch)    // append to message buffer
-                }
+                insert(ev.Ch)
             } else {
                 switch ev.Key {
+
+                case termbox.KeySpace:
+                    insert(rune(' '))
 
                 case termbox.KeyCtrlQ:
                     break loop
@@ -75,14 +72,11 @@ func shell() {
                 case termbox.KeyArrowRight:
                     moveCursorRight()
 
-                case termbox.KeySpace:
-                    print(' ')
-                    mbuff = append(mbuff, ' ')
-
                 case termbox.KeyBackspace:
-                    moveCursorLeft()
-                    termbox.SetCell(C.x, C.y, CONF.nullChar, CONF.fg, CONF.bg)
-                    // TODO: truncate buff to reflect deletion
+                    if C.rx>0 {
+                        moveCursorLeft()
+                        delete()
+                    }
                 }
             }
         }
@@ -90,22 +84,22 @@ func shell() {
 }
 
 // print a single unicode character
-func print(this rune) bool {
-    newline := false
+func print(this rune) int {
+    newline := 0
     termbox.SetCell(C.x, C.y, this, CONF.fg, CONF.bg)
     if C.x++; C.x>=CONF.w {
         nextline(false)
-        newline = true
+        newline = 1
     }
     return newline
 }
 
 // print a string of unicode characters
-func prints(this string) bool {
-    newline := false
+func prints(this string) int {
+    newline := 0
     runes := []rune(this)
     for _,c:=range(runes) {
-        newline = print(c)
+        newline += print(c)
     }
     return newline
 }
@@ -140,7 +134,7 @@ func scroll(lines int) {
     }
 }
 
-
+// move cursor left, account for newlines. Does not move beyond current message
 func moveCursorLeft() {
     if C.rx>0 {
         C.rx--
@@ -153,7 +147,7 @@ func moveCursorLeft() {
     }
 }
 
-
+// move cursor right, account for newlines. Does not move beyond current message
 func moveCursorRight() {
     if C.rx<len(mbuff) {
         C.rx++
@@ -162,5 +156,38 @@ func moveCursorRight() {
             C.x = len(CONF.prompt)
             C.y++
         }
+    }
+}
+
+// remove whatever is under cursor
+func delete() {
+    mbuff = append(mbuff[:C.rx], mbuff[C.rx+1:]...)
+    i:=C.rx % CONF.mw
+    j,k:=C.ry,0
+    m:=C.rx
+    for ;j<=len(mbuff)/CONF.mw; j,k=j+1,k+1 {
+        for ;i<CONF.mw && m<len(mbuff); i++ {
+            termbox.SetCell(i+len(CONF.prompt), C.y+k, mbuff[m],
+                                                            CONF.fg, CONF.bg)
+            m++
+        }
+        i = 0
+    }
+    termbox.SetCell(len(CONF.prompt)+len(mbuff) % CONF.mw,
+                C.y-C.ry+len(mbuff)/CONF.mw, CONF.nullChar, CONF.fg, CONF.bg)
+}
+
+// insert new rune at cursor's position
+func insert(this rune) {
+    mbuff = append(mbuff[:C.rx],               // append char to msg buffer
+                        append([]rune{this}, mbuff[C.rx:]...)...)
+    newline := print(this)
+    currx, curry := C.x, C.y                  // store current cursor position
+    C.rx++                                    // change relative positions
+    C.ry += newline
+    if C.rx<len(mbuff) {
+        newline = prints(string(mbuff[C.rx+1:]))  // print remaining
+        C.ry += newline
+        C.x, C.y = currx, curry                   // restore cursor
     }
 }
