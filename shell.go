@@ -44,7 +44,7 @@ func shell() {
 	CONF.nullChar = termbox.CellBuffer()[0].Ch // get "empty" char for future
 	CONF.w, CONF.h = termbox.Size()            // get initial dimensions
 	CONF.mw = CONF.w - len(CONF.prompt)        // calculate message width per line
-	prints(CONF.prompt)
+	prints(CONF.prompt, false)
 
 loop:
 	for {
@@ -68,7 +68,9 @@ loop:
 					break loop
 
 				case termbox.KeyEnter:
-					nextline(true)
+					C.x = len(CONF.prompt) + len(mbuff)%CONF.mw // move cursor to end of message
+					C.y = (C.y - C.ry) + len(mbuff)/CONF.mw
+					nextline(true, false)
 					// TODO: send msg buffer to server
 					mbuff = []rune{} // reset buffer
 					C.rx = 0         // reset relative position w.r.t msg
@@ -94,37 +96,45 @@ loop:
 }
 
 // print a single unicode character
-func print(this rune) int {
+func print(this rune, trackRelative bool) int {
 	newline := 0
 	termbox.SetCell(C.x, C.y, this, CONF.fg, CONF.bg)
 	if C.x++; C.x >= CONF.w {
-		nextline(false)
-		newline = 1
+		newline = nextline(false, trackRelative)
 	}
 	return newline
 }
 
 // print a string of unicode characters
-func prints(this string) int {
+func prints(this string, trackRelative bool) int {
 	newline := 0
 	runes := []rune(this)
 	for _, c := range runes {
-		newline += print(c)
+		newline += print(c, trackRelative)
 	}
 	return newline
 }
 
 // print a new line with/without a newline prompt
-func nextline(printPrompt bool) {
-	if C.y++; C.y >= CONF.h {
-		scroll(1)
+// trackRelative=true  -> return 1 for each new line,
+//              =false -> only return 1 when actual Y coord changes, like
+//                        scrolling when cursor at bottom does not change C.y
+func nextline(printPrompt bool, trackRelative bool) int {
+	newline := 1
+	if C.y++; C.y >= CONF.h { // scroll up if at bottom
+		scroll(1)                   // scrolling also takes up C.y
+		C.y = CONF.h - 1            // restoring C.y to end (since nextline)
+		if trackRelative == false { // i.e. only return change in abs. Y coord
+			newline = 0
+		}
 	}
 	C.x = 0
 	if printPrompt == true {
-		prints(CONF.prompt)
+		prints(CONF.prompt, false)
 	} else {
-		prints(strings.Repeat(" ", len(CONF.prompt)))
+		prints(strings.Repeat(" ", len(CONF.prompt)), false)
 	}
+	return newline
 }
 
 // scrolls screen up (out of screen stuff lost)
@@ -191,30 +201,31 @@ func delete() {
 func insert(this rune) {
 	mbuff = append(mbuff[:C.rx], // append char to msg buffer
 		append([]rune{this}, mbuff[C.rx:]...)...)
-	newline := print(this)
+	newline := print(this, true)
 	currx, curry := C.x, C.y // store current cursor position
 	C.rx++                   // change relative positions
 	C.ry += newline
 	if C.rx < len(mbuff) {
-		newline = prints(string(mbuff[C.rx+1:])) // print remaining
-		C.ry += newline
-		C.x, C.y = currx, curry // restore cursor
+		prints(string(mbuff[C.rx:]), true) // print remaining
+		C.x, C.y = currx, curry            // restore cursor
 	}
 }
 
 // prints a new incoming message above the current message.
 func printNewMessage(m message) {
-	C.y -= C.ry
 	oldCx := C.x
+	oldCy := C.y
+	C.y -= C.ry
 	C.x = 0
 	for j := 0; j <= len(mbuff)/CONF.mw; j++ { // clear current message
 		for i := 0; i < CONF.w; i++ {
 			termbox.SetCell(i, C.y+j, CONF.nullChar, CONF.fg, CONF.bg)
 		}
 	}
-	prints(CONF.prompt)   // print new prompt
-	prints(m.content)     // print incoming message
-	nextline(true)        // go to next line
-	prints(string(mbuff)) // print current message
-	C.x = oldCx           // restore x cursor
+	oldCy += prints(CONF.prompt, false)   // print new prompt
+	oldCy += prints(m.content, false)     // print incoming message
+	oldCy += nextline(true, false)        // go to next line
+	oldCy += prints(string(mbuff), false) // print current message
+	C.x = oldCx                           // restore x/y cursors b/c printing moves it to end
+	C.y = (C.y - len(mbuff)/CONF.mw) + C.ry
 }
