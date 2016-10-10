@@ -2,9 +2,9 @@ package main
 
 import (
 	"bytes"
-	"net/http"
-
 	termbox "github.com/nsf/termbox-go"
+	"net/http"
+	"regexp"
 )
 
 // represents a chat participant
@@ -12,12 +12,13 @@ type client struct {
 	username     string
 	host         string
 	port         string
-	participants []client
+	participants map[string]client
 }
 
-// an infinite loop that handles incoming requests
+// handles incoming requests, and spawns print and send services
 func serve(a *args) {
 	go printService()
+	go sendService()
 	http.HandleFunc("/", handler)
 	http.ListenAndServe(a.host+":"+a.port, nil)
 }
@@ -38,5 +39,23 @@ func printService() {
 		termbox.Interrupt()
 		printNewMessage(msg)
 		sync <- 1
+	}
+}
+
+// uses a POST request to send message to all or selected participants
+func sendService() {
+	r, _ := regexp.Compile("@(\\w+)") // alphanumeric usernames only
+	var err error
+	for {
+		msg := <-outbox
+		unames := r.FindAllStringSubmatch(msg.content, -1)
+		if len(unames) > 0 {
+
+		} else {
+			_, err = http.Post("http://"+ARGS.host+":"+ARGS.port, "text/html", bytes.NewReader([]byte(msg.content)))
+		}
+		if err != nil {
+			inbox <- message{content: "ERROR:" + err.Error()}
+		}
 	}
 }

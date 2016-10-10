@@ -26,15 +26,14 @@ type config struct {
 	mw       int               // message width (w-len(prompt))
 	bg       termbox.Attribute // background attributes (color)
 	fg       termbox.Attribute // foreground attributes (color)
-	bgx      termbox.Attribute // active background attributes (color)
-	fgx      termbox.Attribute // active foreground attributes (color)
 	prompt   string            // prompt at beginning of new line
 	nullChar rune              // representation of empty char on console
+	addrCh   rune              // char representing user address. Default '@'
 }
 
 type message struct {
-	content   string
-	recipient client
+	content string
+	user    string
 }
 
 // interactive shell loop
@@ -68,6 +67,9 @@ loop:
 					break loop
 
 				case termbox.KeyEnter:
+					if len(mbuff) > 0 {
+						outbox <- message{content: string(mbuff)}
+					}
 					C.x = len(CONF.prompt) + len(mbuff)%CONF.mw // move cursor to end of message
 					C.y = (C.y - C.ry) + len(mbuff)/CONF.mw
 					nextline(true)
