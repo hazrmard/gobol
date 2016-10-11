@@ -58,7 +58,6 @@ loop:
 					break loop
 
 				case termbox.KeyEnter:
-					printNewMessage(message{user: "CURRENT BUFFER", content: string(mbuff)})
 					isCommand, err := commandHandler()
 					if err != nil {
 						printNewMessage(message{user: "ERROR", content: err.Error()})
@@ -247,7 +246,7 @@ func commandHandler() (bool, error) {
 	switch fields[0] {
 
 	case "add": // add is to include a user in chat. Overwrites if already exists
-		<-partSemaphore
+
 		if len(fields) != 2 {
 			return true, errors.New("Use: add user@host:port")
 		}
@@ -258,18 +257,19 @@ func commandHandler() (bool, error) {
 			return true, errors.New("Use: add user@host:port")
 		}
 		username := uMatch[0][1]
+		<-partSemaphore // enter critical section
 		participants[username] = client{
 			username: username,
 			host:     ipMatch[0][1],
 			port:     pMatch[0][1],
 		}
-		partSemaphore <- 1
+		partSemaphore <- 1 // exit criticial section before return
 
 	case "remove": // remove a username from session
-		<-partSemaphore
 		if len(fields) != 2 {
 			return true, errors.New("Use: remove username")
 		}
+		<-partSemaphore
 		delete(participants, fields[1])
 		partSemaphore <- 1
 	}

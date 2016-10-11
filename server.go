@@ -25,22 +25,30 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	r.Body.Read(buf)              // read into buffer
 	r.Body.Close()                // close request
 	buf = bytes.Trim(buf, "\x00") // trim null bytes
-	unameMatch := CONF.unamePattern.FindAllStringSubmatch(string(buf), -1)
+	// unameMatch := CONF.unamePattern.FindAllStringSubmatch(string(buf), -1)
+	uMatch := CONF.uPattern.FindAllStringSubmatch(string(buf), -1)
+	ipMatch := CONF.ipPattern.FindAllStringSubmatch(string(buf), -1)
+	pMatch := CONF.portPattern.FindAllStringSubmatch(string(buf), -1)
 
-	if len(unameMatch) == 1 {
+	if len(uMatch) == 1 && len(ipMatch) == 1 && len(pMatch) == 1 {
 
-		uname := unameMatch[0][1]
+		uname := uMatch[0][1]
+		uport := pMatch[0][1]
 		uip := CONF.ipPattern.FindAllStringSubmatch(r.RemoteAddr, -1)[0][1]
-		uport := CONF.portPattern.FindAllStringSubmatch(r.RemoteAddr, -1)[0][1]
+		// Port that the POST request originates from is not the same as the
+		// port # that the other client is listening on.
+		//uport := CONF.portPattern.FindAllStringSubmatch(r.RemoteAddr, -1)[0][1]
 
 		<-partSemaphore // enter critical section
 		participant, exists := participants[uname]
 
-		if exists == true && (participant.host != uip || participant.port != uport) {
-			alreadyExists(w, "Another user with the same username: "+uname+"@"+uip+":"+uport)
+		if exists == true && participant.host != uip {
+			badResponse(w, "Another user with the same username: "+uname+"@"+uip+":"+uport)
+			partSemaphore <- 1
 			return
 		} else if exists == false && uname == ARGS.username {
-			alreadyExists(w, "Same as host username.")
+			badResponse(w, "Same as host username.")
+			partSemaphore <- 1
 			return
 		} else if exists == false && uname != ARGS.username { // if username does not exist, add to participants
 			participants[uname] = client{
@@ -53,8 +61,10 @@ func handler(w http.ResponseWriter, r *http.Request) {
 		partSemaphore <- 1
 		inbox <- message{ // finally,
 			user:    uname + "@" + uip + ":" + uport,
-			content: string(buf)[len(uname+CONF.userSuffix)-1:],
+			content: string(buf)[len(uname+"@"+uip+":"+uport+CONF.userSuffix):],
 		} // push to channel for printService
+	} else {
+		badResponse(w, "Bad format.")
 	}
 
 }
@@ -84,7 +94,7 @@ func sendService() {
 
 		for _, c := range clients { // send clients
 			resp, err = http.Post("http://"+c.host+":"+c.port, "text/html",
-				bytes.NewReader([]byte(ARGS.username+CONF.userSuffix+msg.content)))
+				bytes.NewReader([]byte(ARGS.username+"@"+ARGS.host+":"+ARGS.port+CONF.userSuffix+msg.content)))
 
 			if err != nil {
 				inbox <- message{user: "LOCAL ERROR", content: err.Error()}
@@ -101,7 +111,7 @@ func sendService() {
 }
 
 // returns an error response
-func alreadyExists(w http.ResponseWriter, s string) {
+func badResponse(w http.ResponseWriter, s string) {
 	w.WriteHeader(http.StatusConflict)
 	w.Write([]byte(s))
 }

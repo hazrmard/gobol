@@ -58,8 +58,8 @@ func main() {
 
 	CONF.addrPattern, _ = regexp.Compile(CONF.addrCh + "(\\w+)")       // regex pattern for @username
 	CONF.unamePattern, _ = regexp.Compile("^(\\w+)" + CONF.userSuffix) // regex pattern for username: msg
-	CONF.ipPattern, _ = regexp.Compile("([0-9\\.]+):")
-	CONF.portPattern, _ = regexp.Compile(":([0-9]+)$")
+	CONF.ipPattern, _ = regexp.Compile("^\\w*?@?([\\w\\.]+):")
+	CONF.portPattern, _ = regexp.Compile("^\\w*@?[0-9\\.]+:([0-9]+)")
 	CONF.cPattern, _ = regexp.Compile("^\\\\\\\\(.*)") // \\ followed by command
 	CONF.uPattern, _ = regexp.Compile("^(\\w+)@")
 
