@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"strings"
 
 	termbox "github.com/nsf/termbox-go"
@@ -20,17 +21,6 @@ type cursor struct {
 	ry int // relative pos. from top of current message
 }
 
-type config struct {
-	h        int               // height of console
-	w        int               // width of console
-	mw       int               // message width (w-len(prompt))
-	bg       termbox.Attribute // background attributes (color)
-	fg       termbox.Attribute // foreground attributes (color)
-	prompt   string            // prompt at beginning of new line
-	nullChar rune              // representation of empty char on console
-	addrCh   rune              // char representing user address. Default '@'
-}
-
 type message struct {
 	content string
 	user    string
@@ -38,6 +28,7 @@ type message struct {
 
 // interactive shell loop
 func shell() {
+	go printService()
 	termbox.Init()                             // start termbox
 	defer termbox.Close()                      // push Close to bottom of stack
 	CONF.nullChar = termbox.CellBuffer()[0].Ch // get "empty" char for future
@@ -67,16 +58,21 @@ loop:
 					break loop
 
 				case termbox.KeyEnter:
-					if len(mbuff) > 0 {
-						outbox <- message{content: string(mbuff)}
+					printNewMessage(message{user: "CURRENT BUFFER", content: string(mbuff)})
+					isCommand, err := commandHandler()
+					if err != nil {
+						printNewMessage(message{user: "ERROR", content: err.Error()})
+					} else {
+						if isCommand == false && len(mbuff) > 0 {
+							outbox <- message{content: string(mbuff)}
+						}
+						C.x = len(CONF.prompt) + len(mbuff)%CONF.mw // move cursor to end of message
+						C.y = (C.y - C.ry) + len(mbuff)/CONF.mw
+						nextline(true)
+						mbuff = []rune{} // reset buffer
+						C.rx = 0         // reset relative position w.r.t msg
+						C.ry = 0
 					}
-					C.x = len(CONF.prompt) + len(mbuff)%CONF.mw // move cursor to end of message
-					C.y = (C.y - C.ry) + len(mbuff)/CONF.mw
-					nextline(true)
-					// TODO: send msg buffer to server
-					mbuff = []rune{} // reset buffer
-					C.rx = 0         // reset relative position w.r.t msg
-					C.ry = 0
 
 				case termbox.KeyArrowLeft:
 					moveCursorLeft()
@@ -87,13 +83,23 @@ loop:
 				case termbox.KeyBackspace:
 					if C.rx > 0 {
 						moveCursorLeft()
-						delete()
+						del()
 					}
 				}
 			}
 		} else if ev.Type == termbox.EventInterrupt {
 			<-sync // wait for all-clear signal from printService
 		}
+	}
+}
+
+// a service that prints whatever message comes into 'inbox' channel
+func printService() {
+	for {
+		msg := <-inbox
+		termbox.Interrupt()
+		printNewMessage(msg)
+		sync <- 1
 	}
 }
 
@@ -176,7 +182,7 @@ func moveCursorRight() {
 }
 
 // remove whatever is under cursor
-func delete() {
+func del() {
 	mbuff = append(mbuff[:C.rx], mbuff[C.rx+1:]...)
 	i := C.rx % CONF.mw
 	j, k := C.ry, 0
@@ -218,9 +224,54 @@ func printNewMessage(m message) {
 		}
 	}
 	prints(CONF.prompt)   // print new prompt
+	prints(m.user)        // print user name
+	nextline(false)       // next line w/o prompt
 	prints(m.content)     // print incoming message
 	nextline(true)        // go to next line
 	prints(string(mbuff)) // print current message
 	C.x = oldCx           // restore x/y cursors b/c printing moves it to end
 	C.y = (C.y - len(mbuff)/CONF.mw) + C.ry
+}
+
+// checks mbuff for commands
+func commandHandler() (bool, error) {
+	command := CONF.cPattern.FindAllStringSubmatch(string(mbuff), -1) // find command string
+	if len(command) == 0 {
+		return false, nil
+	}
+	fields := strings.Fields(command[0][1]) // split command into tokens
+	if len(fields) == 0 {
+		return false, errors.New("Enter a command after \\\\")
+	}
+
+	switch fields[0] {
+
+	case "add": // add is to include a user in chat. Overwrites if already exists
+		<-partSemaphore
+		if len(fields) != 2 {
+			return true, errors.New("Use: add user@host:port")
+		}
+		uMatch := CONF.uPattern.FindAllStringSubmatch(fields[1], -1)
+		ipMatch := CONF.ipPattern.FindAllStringSubmatch(fields[1], -1)
+		pMatch := CONF.portPattern.FindAllStringSubmatch(fields[1], -1)
+		if len(uMatch) == 0 || len(pMatch) == 0 || len(ipMatch) == 0 {
+			return true, errors.New("Use: add user@host:port")
+		}
+		username := uMatch[0][1]
+		participants[username] = client{
+			username: username,
+			host:     ipMatch[0][1],
+			port:     pMatch[0][1],
+		}
+		partSemaphore <- 1
+
+	case "remove": // remove a username from session
+		<-partSemaphore
+		if len(fields) != 2 {
+			return true, errors.New("Use: remove username")
+		}
+		delete(participants, fields[1])
+		partSemaphore <- 1
+	}
+	return true, nil
 }
