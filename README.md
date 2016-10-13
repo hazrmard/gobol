@@ -43,7 +43,10 @@ To send a targeted message:
 Targeted messages are only seen by the users they are addressed to. The messages
 appear with the `@USERNAME` part so recipients know it is a targeted message.  
 
-To quit, press `Ctrl+Q`.
+To quit, press `Ctrl+Q`.  
+
+### Under the hood
+![gobol control flow](./overview.png)  
 
 ### BTW
 `gobol` is my first *Go* project. I started working on it midway through [A
