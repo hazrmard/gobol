@@ -4,7 +4,7 @@ of *Go* (the language) and *bol*/(*بول*) - the Urdu word for "talk", pronounc
 'bole'.  
 
 ## Installation
-You need to have `Go` installed and properly set up to build from source. Type:  
+You need to have *Go* installed and properly set up to build from source. Type:  
 ```bash
 >> go get github.com/hazrmard/gobol
 ```  
@@ -23,11 +23,11 @@ To add a user:
 ```
 \\ add USERNAME@HOST:PORT
 ```  
-Where `HOST` is IP address of the target user, and `PORT` is the port number
-their instance of `gobol` is listening on. Multiple users can be added and any
-messages typed will be sent to all added users. The user for any incoming message
-is automatically added to chat participants. So if you, `A`, add `B` and send a
-message, `B` will automatically add you to their list.  
+Where `HOST` is IP (IPv4 or IPv6) address of the target user, and `PORT` is the
+port number their instance of `gobol` is listening on. Multiple users can be
+added and any messages typed will be sent to all added users. The user for any
+incoming message is automatically added to chat participants. So if you, `A`,
+add `B` and send a message, `B` will automatically add you to their list.  
 
 Similarly, to remove a user:  
 ```

@@ -18,7 +18,6 @@ type config struct {
 	addrCh       string            // char representing user address. Default '@'
 	userSuffix   string            // string in message after username
 	addrPattern  *regexp.Regexp    // pattern to match @username addressing
-	unamePattern *regexp.Regexp    // pattern to match incoming message username: msg
 	ipPattern    *regexp.Regexp    // pattern to match ip in IP:PORT
 	portPattern  *regexp.Regexp    // pattern to match port in IP:PORT
 	cPattern     *regexp.Regexp    // pattern to match commands
@@ -36,7 +35,7 @@ var participants map[string]client // a username->client map
 var CONF config = config{
 	prompt:     ":: ",
 	addrCh:     "@",
-	userSuffix: ": ",
+	userSuffix: "- ",
 	cprompt:    "\\\\",
 } // some configuration settings
 
@@ -57,9 +56,8 @@ func main() {
 	participants = make(map[string]client)   // initialize map for participants
 
 	CONF.addrPattern, _ = regexp.Compile(CONF.addrCh + "(\\w+)")       // regex pattern for @username
-	CONF.unamePattern, _ = regexp.Compile("^(\\w+)" + CONF.userSuffix) // regex pattern for username: msg
-	CONF.ipPattern, _ = regexp.Compile("^\\w*?@?([\\w\\.]+):")
-	CONF.portPattern, _ = regexp.Compile("^\\w*@?[0-9\\.]+:([0-9]+)")
+	CONF.ipPattern, _ = regexp.Compile("^\\w*?@?\\[?([\\w\\.:]+)\\]?:")
+	CONF.portPattern, _ = regexp.Compile("^\\w*@?\\[?[\\w\\.:]+\\]?:([0-9]+)")
 	CONF.cPattern, _ = regexp.Compile("^\\\\\\\\(.*)") // \\ followed by command
 	CONF.uPattern, _ = regexp.Compile("^(\\w+)@")
 

@@ -117,7 +117,12 @@ func prints(this string) int {
 	newline := 0
 	runes := []rune(this)
 	for _, c := range runes {
-		newline += print(c)
+		if c=='\n' {
+			newline += nextline(false)
+		} else {
+			newline += print(c)
+		}
+
 	}
 	return newline
 }
@@ -260,7 +265,7 @@ func commandHandler() (bool, error) {
 		<-partSemaphore // enter critical section
 		participants[username] = client{
 			username: username,
-			host:     ipMatch[0][1],
+			host:     formatAddr(ipMatch[0][1]),
 			port:     pMatch[0][1],
 		}
 		partSemaphore <- 1 // exit criticial section before return

@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"net"
 	"net/http"
+	"strings"
 )
 
 // represents a chat participant
@@ -16,7 +18,10 @@ type client struct {
 func serve() {
 	go sendService()
 	http.HandleFunc("/", handler)
-	http.ListenAndServe(ARGS.host+":"+ARGS.port, nil)
+	l4, _ := net.Listen("tcp4", ":"+ARGS.port)
+	l6, _ := net.Listen("tcp6", ":"+ARGS.port)
+	go http.Serve(l6, http.DefaultServeMux) // Serve ipv6 requests
+	http.Serve(l4, http.DefaultServeMux)    // and ipv4 requests
 }
 
 // a handler for each incoming request/message
@@ -25,43 +30,43 @@ func handler(w http.ResponseWriter, r *http.Request) {
 	r.Body.Read(buf)              // read into buffer
 	r.Body.Close()                // close request
 	buf = bytes.Trim(buf, "\x00") // trim null bytes
-	// unameMatch := CONF.unamePattern.FindAllStringSubmatch(string(buf), -1)
-	uMatch := CONF.uPattern.FindAllStringSubmatch(string(buf), -1)
-	ipMatch := CONF.ipPattern.FindAllStringSubmatch(string(buf), -1)
-	pMatch := CONF.portPattern.FindAllStringSubmatch(string(buf), -1)
 
-	if len(uMatch) == 1 && len(ipMatch) == 1 && len(pMatch) == 1 {
+	uMatch := CONF.uPattern.FindAllStringSubmatch(string(buf), -1)     // sender's username added to msg body
+	ipMatch := CONF.ipPattern.FindAllStringSubmatch(string(buf), -1)   // IP manually added to msg body (127.0.0.1)
+	pMatch := CONF.portPattern.FindAllStringSubmatch(string(buf), -1)  // Port number specified in msg body
+	ripMatch := CONF.ipPattern.FindAllStringSubmatch(r.RemoteAddr, -1) // request IP: external ip of sender
 
-		uname := uMatch[0][1]
-		uport := pMatch[0][1]
-		uip := CONF.ipPattern.FindAllStringSubmatch(r.RemoteAddr, -1)[0][1]
-		// Port that the POST request originates from is not the same as the
-		// port # that the other client is listening on.
-		//uport := CONF.portPattern.FindAllStringSubmatch(r.RemoteAddr, -1)[0][1]
+	if len(uMatch) >= 1 && len(ipMatch) >= 1 && len(pMatch) >= 1 && len(ripMatch) >= 1 {
+		uname := uMatch[0][1]   // sender's username
+		uport := pMatch[0][1]   // port the sender is listening on
+		mip := ipMatch[0][1]    // sender's local IP appended to message body
+		uip := ripMatch[0][1]   // user's external IP
+		fuip := formatAddr(uip) // formated user ip
 
 		<-partSemaphore // enter critical section
 		participant, exists := participants[uname]
 
-		if exists == true && participant.host != uip {
+		if exists == true && participant.host != fuip {
 			badResponse(w, "Another user with the same username: "+uname+"@"+uip+":"+uport)
-			partSemaphore <- 1
+			partSemaphore <- 1 // exit critical section before return
 			return
 		} else if exists == false && uname == ARGS.username {
 			badResponse(w, "Same as host username.")
-			partSemaphore <- 1
+			partSemaphore <- 1 // exit critical section before return
 			return
 		} else if exists == false && uname != ARGS.username { // if username does not exist, add to participants
 			participants[uname] = client{
 				username: uname,
-				host:     uip,
+				host:     fuip,
 				port:     uport,
 			}
 		}
+		partSemaphore <- 1 // exit critical section
+
 		ok(w, uname+"@"+uip+":"+uport)
-		partSemaphore <- 1
 		inbox <- message{ // finally,
 			user:    uname + "@" + uip + ":" + uport,
-			content: string(buf)[len(uname+"@"+uip+":"+uport+CONF.userSuffix):],
+			content: string(buf)[len(uname+"@"+mip+":"+uport+CONF.userSuffix):],
 		} // push to channel for printService
 	} else {
 		badResponse(w, "Bad format.")
@@ -120,4 +125,12 @@ func badResponse(w http.ResponseWriter, s string) {
 func ok(w http.ResponseWriter, s string) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(s))
+}
+
+// wraps ipv6 addresses in [ ]
+func formatAddr(addr string) string {
+	if strings.Count(addr, ":") > 1 {
+		return "[" + addr + "]"
+	}
+	return addr
 }
