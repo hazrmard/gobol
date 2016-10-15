@@ -46,44 +46,46 @@ loop:
 		ev := termbox.PollEvent()
 
 		if ev.Type == termbox.EventKey {
-			if ev.Ch != 0 {
-				insert(ev.Ch)
-			} else {
-				switch ev.Key {
 
-				case termbox.KeySpace:
-					insert(rune(' '))
+			switch ev.Key {
 
-				case termbox.KeyCtrlQ:
-					break loop
+			case termbox.KeySpace:
+				insert(rune(' '))
 
-				case termbox.KeyEnter:
-					isCommand, err := commandHandler()
-					if err != nil {
-						printNewMessage(message{user: "ERROR", content: err.Error()})
-					} else {
-						if isCommand == false && len(mbuff) > 0 {
-							outbox <- message{content: string(mbuff)}
-						}
-						C.x = len(CONF.prompt) + len(mbuff)%CONF.mw // move cursor to end of message
-						C.y = (C.y - C.ry) + len(mbuff)/CONF.mw
-						nextline(true)
-						mbuff = []rune{} // reset buffer
-						C.rx = 0         // reset relative position w.r.t msg
-						C.ry = 0
+			case termbox.KeyCtrlQ:
+				break loop
+
+			case termbox.KeyEnter:
+				isCommand, err := commandHandler()
+				if err != nil {
+					printNewMessage(message{user: "ERROR", content: err.Error()})
+				} else {
+					if isCommand == false && len(mbuff) > 0 {
+						outbox <- message{content: string(mbuff)}
 					}
+					C.x = len(CONF.prompt) + len(mbuff)%CONF.mw // move cursor to end of message
+					C.y = (C.y - C.ry) + len(mbuff)/CONF.mw
+					nextline(true)
+					mbuff = []rune{} // reset buffer
+					C.rx = 0         // reset relative position w.r.t msg
+					C.ry = 0
+				}
 
-				case termbox.KeyArrowLeft:
+			case termbox.KeyArrowLeft:
+				moveCursorLeft()
+
+			case termbox.KeyArrowRight:
+				moveCursorRight()
+
+			case termbox.KeyBackspace:
+				if C.rx > 0 {
 					moveCursorLeft()
+					del()
+				}
 
-				case termbox.KeyArrowRight:
-					moveCursorRight()
-
-				case termbox.KeyBackspace:
-					if C.rx > 0 {
-						moveCursorLeft()
-						del()
-					}
+			default:
+				if ev.Ch != 0 {
+					insert(ev.Ch)
 				}
 			}
 		} else if ev.Type == termbox.EventInterrupt {
