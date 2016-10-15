@@ -12,6 +12,7 @@ type client struct {
 	username string
 	host     string
 	port     string
+	blocked  bool
 }
 
 // handles incoming requests, and spawns print and send services
@@ -45,8 +46,11 @@ func handler(w http.ResponseWriter, r *http.Request) {
 
 		<-partSemaphore // enter critical section
 		participant, exists := participants[uname]
-
-		if exists == true && participant.host != fuip {
+		if exists == true && participant.blocked == true {
+			ok(w, "")
+			partSemaphore <- 1
+			return
+		} else if exists == true && participant.host != fuip {
 			badResponse(w, "Another user with the same username: "+uname+"@"+uip+":"+uport)
 			partSemaphore <- 1 // exit critical section before return
 			return
@@ -55,7 +59,7 @@ func handler(w http.ResponseWriter, r *http.Request) {
 			partSemaphore <- 1 // exit critical section before return
 			return
 		} else if exists == false && uname != ARGS.username { // if username does not exist, add to participants
-			participants[uname] = client{
+			participants[uname] = &client{
 				username: uname,
 				host:     fuip,
 				port:     uport,
@@ -87,12 +91,14 @@ func sendService() {
 		if len(unames) > 0 { // create a slice of clients to send to
 			for _, u := range unames {
 				if c, exists := participants[u[1]]; exists == true {
-					clients = append(clients, c)
+					clients = append(clients, *c)
 				}
 			}
 		} else {
 			for _, c := range participants {
-				clients = append(clients, c)
+				if c.blocked == false {
+					clients = append(clients, *c)
+				}
 			}
 		}
 		partSemaphore <- 1 // exit critical section to access participants

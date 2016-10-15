@@ -16,6 +16,8 @@ Start the application by typing:
 ```bash
 >> gobol.exe -u "AlphanumericUsername" -p PORT_NUMBER
 ```  
+You can send messages to all added users by typing the message and hitting
+enter.
 
 `gobol` has a built-in command interface. All commands are preceded by `\\`.  
 
@@ -36,6 +38,16 @@ Similarly, to remove a user:
 Note, this does not prevent the user from sending you messages. It only prevents
 your messages from being transmitted to the user.  
 
+To block a user, type any one of:  
+```
+\\ block user USERNAME
+\\ block ip IP_ADDRESS
+\\ block port PORT_NUMBER
+```  
+To unblock, replace `block` with `unblock`. Blocked users cannot send you
+messages. Nor can you message a blocked user (except for targeted messages).
+A blocked user does not know if it's blocked.
+
 To send a targeted message:
 ```
 @USERNAME @OTHERUSERNAME Hey, this is a targeted message.
@@ -43,6 +55,11 @@ To send a targeted message:
 Targeted messages are only seen by the users they are addressed to. The messages
 appear with the `@USERNAME` part so recipients know it is a targeted message.  
 
+To get a list of all users added to chat session:  
+```
+\\ list
+```
+  
 To quit, press `Ctrl+Q`.  
 
 ### Under the hood

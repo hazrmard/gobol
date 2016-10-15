@@ -117,7 +117,7 @@ func prints(this string) int {
 	newline := 0
 	runes := []rune(this)
 	for _, c := range runes {
-		if c=='\n' {
+		if c == '\n' {
 			newline += nextline(false)
 		} else {
 			newline += print(c)
@@ -237,7 +237,7 @@ func printNewMessage(m message) {
 	C.y = (C.y - len(mbuff)/CONF.mw) + C.ry
 }
 
-// checks mbuff for commands
+// checks mbuff (message buffer) for commands
 func commandHandler() (bool, error) {
 	command := CONF.cPattern.FindAllStringSubmatch(string(mbuff), -1) // find command string
 	if len(command) == 0 {
@@ -263,7 +263,7 @@ func commandHandler() (bool, error) {
 		}
 		username := uMatch[0][1]
 		<-partSemaphore // enter critical section
-		participants[username] = client{
+		participants[username] = &client{
 			username: username,
 			host:     formatAddr(ipMatch[0][1]),
 			port:     pMatch[0][1],
@@ -272,11 +272,62 @@ func commandHandler() (bool, error) {
 
 	case "remove": // remove a username from session
 		if len(fields) != 2 {
-			return true, errors.New("Use: remove username")
+			return true, errors.New("Use: remove USERNAME")
 		}
 		<-partSemaphore
 		delete(participants, fields[1])
 		partSemaphore <- 1
+
+	case "list": // list all users in chat session
+		<-partSemaphore
+		for _, v := range participants {
+			nextline(false)
+			prints(v.username + "@" + v.host + ":" + v.port)
+			if v.blocked == true {
+				prints(" (blocked)")
+			}
+		}
+		partSemaphore <- 1
+
+	case "block": // block user from sending/receiving messages
+		if len(fields) != 3 {
+			return true, errors.New("Use: block [user|ip|port] [USERNAME|IP|PORT]")
+		}
+		<-partSemaphore
+		if c := findBy(fields[1], fields[2]); c != nil {
+			c.blocked = true
+		}
+		partSemaphore <- 1
+
+	case "unblock": // unblock user
+		if len(fields) != 3 {
+			return true, errors.New("Use: unblock [user|ip|port] [USERNAME|IP|PORT]")
+		}
+		<-partSemaphore
+		if c := findBy(fields[1], fields[2]); c != nil {
+			c.blocked = false
+		}
+		partSemaphore <- 1
 	}
 	return true, nil
+}
+
+// find and return pointer to client in participants map that matches criterion
+func findBy(what, value string) *client {
+	if c, exists := participants[value]; exists == true && what == "user" {
+		return c
+	} else if what == "ip" {
+		for k := range participants {
+			if c, _ := participants[k]; c.host == formatAddr(value) {
+				return c
+			}
+		}
+	} else if what == "port" {
+		for k := range participants {
+			if c, _ := participants[k]; c.port == value {
+				return c
+			}
+		}
+	}
+	return nil
 }
